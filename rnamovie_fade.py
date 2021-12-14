@@ -162,7 +162,7 @@ def min_distances(sequence, structures, init_rotation=0, xylimit=150, rlimit=20)
 
 
 
-class rnamovie(Scene):
+class rnamovie_fade(Scene):
     def construct(self):
 
         coordinates = min_distances(
@@ -210,10 +210,14 @@ class rnamovie(Scene):
             gu_bonds = gu_bonds.append(rowdict, ignore_index=True)
 
 
+        all_objects = []
+        all_texts = []
+
         for k, c in enumerate(coordinates):
             # backbone = backbone_links.loc[[i]]
             # print (backbone)
             draw_objects = []
+            text_objects = []
 
             # nucleotide characters
             # for index, value in backbone.items():
@@ -224,7 +228,7 @@ class rnamovie(Scene):
                 b *= scene_scalar  
                 text = Text(ch, font_size=13)
                 text.move_to([a, b, 0])
-                draw_objects.append(text)
+                text_objects.append(text)
 
                 if i+1 == len(sequence):
                     break
@@ -258,7 +262,7 @@ class rnamovie(Scene):
                 y *= scene_scalar  
                 text = Text(str(ch), font_size=15)
                 text.move_to([x, y, 0])
-                draw_objects.append(text)
+                text_objects.append(text)
 
             # aucg bonds
             for index, value in aucg_bonds.items():
@@ -271,10 +275,10 @@ class rnamovie(Scene):
                     if pos2 == len(sequence):
                         pos2 = pos1
 
-                    # a, b = (coordinates[k][pos1]+coordinates[k][pos2])/2
-                    # c, d = (coordinates[k][pos1]+coordinates[k][pos2])/2
-                    a, b = coordinates[k][pos1]*0.33+coordinates[k][pos2]*0.66
-                    c, d = coordinates[k][pos1]*0.66+coordinates[k][pos2]*0.33
+                    a, b = (coordinates[k][pos1]+coordinates[k][pos2])/2
+                    c, d = (coordinates[k][pos1]+coordinates[k][pos2])/2
+                    # a, b = coordinates[k][pos1]*0.33+coordinates[k][pos2]*0.66
+                    # c, d = coordinates[k][pos1]*0.66+coordinates[k][pos2]*0.33
 
                     line_width = 0 # fade in/out: opacity to zero
                 else:
@@ -317,21 +321,68 @@ class rnamovie(Scene):
                 circle.stroke_width = line_width
                 draw_objects.append(circle)
 
-            # render all objects
-            draw_objects = VGroup(*draw_objects)
+
+            all_objects.append(draw_objects)
+            all_texts.append(text_objects)
+
+        
 
 
-            if k == 0:  # initial fade in
-                self.play(FadeIn(draw_objects))
-                self.wait(fadeinout_seconds)
-            elif k+1 != len(coordinates):
-                self.play(Transform(last_objects, draw_objects, run_time=transition_seconds))
-                self.wait(wait_seconds)
-                self.remove(last_objects)
-            else:  # last iteration
-                self.play(Transform(last_objects, draw_objects, run_time=transition_seconds))
-                self.wait(fadeinout_seconds)
-                self.play(FadeOut(last_objects))
+        lastobj = False
+        transition_seconds = 0.4
 
-            last_objects = draw_objects
+        for index in range(len(all_objects)-1):
+            # interpolate 70% point for lines and dots between transitions
+            a = all_objects[index]
+            b = all_objects[index+1]
+            ab = []
+            for i,j in zip(a, b):
+                ab.append(VMobject().interpolate(i,j, alpha=0.7))
+
+            # Manim currently has problems interpolating text objects, 
+            # lets calculate them manually:
+            at = all_texts[index]
+            bt = all_texts[index+1]
+            abt = []
+            for i,j in zip(at, bt):
+                c1 = i.get_center()
+                c2 = j.get_center()
+                coord = c1*0.3+c2*0.7
+                abt.append(Text(i.text, font_size=i.font_size).move_to(coord))
+
+            a += at
+            b += bt
+            ab += abt
+
+            if index==0:
+
+                a = VGroup(*a)
+                # init render
+                self.play(FadeIn(a))
+                self.wait(transition_seconds)
+
+            else:
+                # a = VGroup(*a)
+                a = lastobj
+
+            if index==len(all_objects)-2:
+                
+                b = VGroup(*b)
+            else:
+                b = VGroup(*ab)
+            lastobj = b
+
+            # render all transitions
+            if index == 0:
+                # init transition
+                self.play(ReplacementTransform(a, b), rate_func=rate_functions.ease_in_sine, run_time=transition_seconds)
+            elif index==len(all_objects)-2:
+                # last transition
+                self.play(ReplacementTransform(a, b), rate_func=rate_functions.ease_out_sine, run_time=transition_seconds)
+                self.wait(transition_seconds)
+                self.play(FadeOut(b))
+            else:
+                self.play(ReplacementTransform(a, b), rate_func=rate_functions.linear, run_time=transition_seconds)
+
+
 
